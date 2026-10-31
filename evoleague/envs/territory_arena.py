@@ -57,6 +57,42 @@ class TerritoryArena:
             "turns_remaining": self.max_turns - self.turns,
         }
 
+    def encode_observation(self, player):
+        if player not in (0, 1):
+            raise ValueError("Player must be 0 or 1.")
+
+        opponent = 1 - player
+
+        territory_features = []
+        for row in self.territory:
+            for owner in row:
+                if owner == -1:
+                    territory_features.append(0.0)
+                elif owner == player:
+                    territory_features.append(1.0)
+                else:
+                    territory_features.append(-1.0)
+
+        def position_features(position):
+            features = [0.0] * (self.size * self.size)
+            row, col = position
+            features[row * self.size + col] = 1.0
+            return features
+
+        own_position = position_features(self.positions[player])
+        opponent_position = position_features(self.positions[opponent])
+
+        remaining_turns = [
+            (self.max_turns - self.turns) / self.max_turns
+        ]
+
+        return (
+                territory_features
+                + own_position
+                + opponent_position
+                + remaining_turns
+        )
+
     def step(self, action):
         if self.done:
             raise RuntimeError("Game has already ended.")
@@ -77,7 +113,8 @@ class TerritoryArena:
 
         self.turns += 1
 
-        reward = 0.0
+        rewards = (0.0, 0.0)
+        winner = None
 
         if self.turns >= self.max_turns:
             self.done = True
@@ -85,18 +122,14 @@ class TerritoryArena:
 
             if scores[0] > scores[1]:
                 winner = 0
+                rewards = (1.0, -1.0)
             elif scores[1] > scores[0]:
                 winner = 1
-            else:
-                winner = None
-
-            if winner is not None:
-                reward = 1.0 if winner == player else -1.0
+                rewards = (-1.0, 1.0)
         else:
-            winner = None
             self.current_player = 1 - player
 
-        return self.observe(), reward, self.done, {
+        return self.observe(), rewards, self.done, {
             "winner": winner
         }
 
@@ -130,3 +163,4 @@ class TerritoryArena:
             f" | Scores: {self.scores()}"
             f" | Current player: {self.current_player}"
         )
+
